@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tablet Reminder</title>
+<style>
+  body{font-family:system-ui,Arial,sans-serif;background:#eef3f8;margin:0;display:flex;justify-content:center;padding:24px}
+  form{background:#fff;max-width:420px;width:100%;padding:24px;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.1)}
+  h2{margin-top:0;color:#1a73e8}
+  label{display:block;margin:14px 0 4px;font-weight:600;font-size:14px}
+  input,select{width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;font-size:15px;box-sizing:border-box}
+  .row{display:flex;gap:8px}
+  .chk{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:14px}
+  .chk input{width:auto}
+  button{margin-top:20px;width:100%;padding:12px;background:#1a73e8;color:#fff;border:0;border-radius:8px;font-size:16px;cursor:pointer}
+  button:hover{background:#1557b0}
+  small{color:#666;display:block;margin-top:12px;line-height:1.4}
+</style>
+</head>
+<body>
+<form id="f">
+  <h2>💊 Tablet Reminder</h2>
+
+  <label for="name">Tablet name</label>
+  <input id="name" required placeholder="e.g. Metformin 500mg">
+
+  <label for="note">Dose / notes (optional)</label>
+  <input id="note" placeholder="e.g. 1 tablet after food">
+
+  <label for="freq">Frequency</label>
+  <select id="freq">
+    <option value="1">Once a day</option>
+    <option value="2">Twice a day</option>
+    <option value="3">Three times a day</option>
+    <option value="eod">Every other day</option>
+    <option value="weekly">Once a week</option>
+  </select>
+
+  <label>Time(s)</label>
+  <div class="row" id="times"></div>
+
+  <label for="start">Start date</label>
+  <input type="date" id="start" required>
+
+  <label for="days">Number of days / occurrences</label>
+  <input type="number" id="days" min="1" value="30">
+  <div class="chk"><input type="checkbox" id="forever"><span>No end date (repeat forever)</span></div>
+
+  <button type="submit">Set Reminder in Google Calendar ↵</button>
+  <small>Pressing Enter also works. Google Calendar opens with the event filled in — click <b>Save</b> there.
+  If you chose twice/three times a day, allow pop-ups for this page so all dose times open.</small>
+</form>
+
+<script>
+const defaults = ["08:00","14:00","20:00"];
+const freq = document.getElementById("freq");
+const timesBox = document.getElementById("times");
+const startEl = document.getElementById("start");
+
+startEl.value = new Date().toISOString().slice(0,10);
+
+function renderTimes(){
+  const n = /^\d$/.test(freq.value) ? +freq.value : 1;
+  timesBox.innerHTML = "";
+  for(let i=0;i<n;i++){
+    const t = document.createElement("input");
+    t.type = "time"; t.value = defaults[i]; t.required = true;
+    timesBox.appendChild(t);
+  }
+}
+freq.addEventListener("change", renderTimes);
+renderTimes();
+
+function fmt(dateStr, timeStr, addMin=0){
+  const [y,m,d] = dateStr.split("-").map(Number);
+  const [hh,mm] = timeStr.split(":").map(Number);
+  const dt = new Date(y, m-1, d, hh, mm + addMin);
+  const p = n => String(n).padStart(2,"0");
+  return `${dt.getFullYear()}${p(dt.getMonth()+1)}${p(dt.getDate())}T${p(dt.getHours())}${p(dt.getMinutes())}00`;
+}
+
+function buildUrl(time){
+  const name = document.getElementById("name").value.trim();
+  const note = document.getElementById("note").value.trim();
+  const date = startEl.value;
+  const count = Math.max(1, parseInt(document.getElementById("days").value) || 1);
+  const forever = document.getElementById("forever").checked;
+
+  let rule;
+  if (freq.value === "eod")        rule = "FREQ=DAILY;INTERVAL=2";
+  else if (freq.value === "weekly") rule = "FREQ=WEEKLY";
+  else                              rule = "FREQ=DAILY";
+  if (!forever) rule += `;COUNT=${count}`;
+
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text: "💊 Take " + name,
+    details: note || "Time to take your tablet.",
+    dates: `${fmt(date,time)}/${fmt(date,time,15)}`,
+    recur: "RRULE:" + rule,
+    ctz: Intl.DateTimeFormat().resolvedOptions().timeZone
+  });
+  return "https://calendar.google.com/calendar/render?" + params.toString();
+}
+
+document.getElementById("f").addEventListener("submit", e=>{
+  e.preventDefault();
+  const times = [...timesBox.querySelectorAll("input")].map(i=>i.value);
+  // open extra dose times in new tabs, then redirect this tab to the first one
+  times.slice(1).forEach(t => window.open(buildUrl(t), "_blank"));
+  window.location.href = buildUrl(times[0]);
+});
+</script>
+</body>
+</html>
